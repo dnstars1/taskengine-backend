@@ -1,5 +1,87 @@
 const { parseIcsUrl } = require('../utils/icsParser');
 const { calculatePriority } = require('../utils/priorityCalculator');
+const { encrypt, decrypt } = require('../utils/crypto');
+
+function validateIcsUrl(icsUrl) {
+  let parsed;
+  try {
+    parsed = new URL(icsUrl);
+  } catch {
+    return 'Invalid URL format';
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return 'Only HTTPS URLs are allowed';
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    hostname.endsWith('.local') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+  ) {
+    return 'Internal/private URLs are not allowed';
+  }
+
+  return null;
+}
+
+async function syncEvents(prisma, userId, icsUrl) {
+  const events = await parseIcsUrl(icsUrl);
+
+  let created = 0;
+  let updated = 0;
+
+  for (const event of events) {
+    const course = await prisma.course.upsert({
+      where: { name_userId: { name: event.courseName, userId } },
+      update: {},
+      create: { name: event.courseName, userId },
+    });
+
+    if (!event.icsUid) continue;
+
+    const priority = calculatePriority(10, 3, event.dueDate);
+
+    const existing = await prisma.assignment.findUnique({
+      where: { icsUid_userId: { icsUid: event.icsUid, userId } },
+    });
+
+    if (existing) {
+      await prisma.assignment.update({
+        where: { id: existing.id },
+        data: {
+          title: event.title,
+          dueDate: event.dueDate,
+          courseId: course.id,
+          priority,
+        },
+      });
+      updated++;
+    } else {
+      await prisma.assignment.create({
+        data: {
+          title: event.title,
+          courseId: course.id,
+          userId,
+          dueDate: event.dueDate,
+          weight: 10,
+          difficulty: 3,
+          priority,
+          source: 'ics',
+          icsUid: event.icsUid,
+        },
+      });
+      created++;
+    }
+  }
+
+  return { created, updated, total: events.length };
+}
 
 async function sync(req, res, next) {
   try {
@@ -10,70 +92,47 @@ async function sync(req, res, next) {
       return res.status(400).json({ error: 'icsUrl is required' });
     }
 
-    // Save the ICS URL on the user
-    await prisma.user.update({
-      where: { id: req.userId },
-      data: { icsUrl, lastSync: new Date() },
-    });
-
-    // Parse events from ICS
-    const events = await parseIcsUrl(icsUrl);
-
-    let created = 0;
-    let updated = 0;
-
-    for (const event of events) {
-      // Find or create course
-      const course = await prisma.course.upsert({
-        where: { name_userId: { name: event.courseName, userId: req.userId } },
-        update: {},
-        create: { name: event.courseName, userId: req.userId },
-      });
-
-      if (!event.icsUid) continue;
-
-      const priority = calculatePriority(10, 3, event.dueDate);
-
-      // Upsert assignment by icsUid
-      const existing = await prisma.assignment.findUnique({
-        where: { icsUid_userId: { icsUid: event.icsUid, userId: req.userId } },
-      });
-
-      if (existing) {
-        await prisma.assignment.update({
-          where: { id: existing.id },
-          data: {
-            title: event.title,
-            dueDate: event.dueDate,
-            courseId: course.id,
-            priority,
-          },
-        });
-        updated++;
-      } else {
-        await prisma.assignment.create({
-          data: {
-            title: event.title,
-            courseId: course.id,
-            userId: req.userId,
-            dueDate: event.dueDate,
-            weight: 10,
-            difficulty: 3,
-            priority,
-            source: 'ics',
-            icsUid: event.icsUid,
-          },
-        });
-        created++;
-      }
+    const validationError = validateIcsUrl(icsUrl);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
-    res.json({
-      message: 'Sync complete',
-      created,
-      updated,
-      total: events.length,
+    const encryptedUrl = encrypt(icsUrl);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { icsUrl: encryptedUrl, lastSync: new Date() },
     });
+
+    const result = await syncEvents(prisma, req.userId, icsUrl);
+
+    res.json({ message: 'Sync complete', ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resync(req, res, next) {
+  try {
+    const prisma = req.app.get('prisma');
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { icsUrl: true },
+    });
+
+    if (!user?.icsUrl) {
+      return res.status(400).json({ error: 'No Moodle URL configured' });
+    }
+
+    const icsUrl = decrypt(user.icsUrl);
+    const result = await syncEvents(prisma, req.userId, icsUrl);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { lastSync: new Date() },
+    });
+
+    res.json({ message: 'Re-sync complete', ...result });
   } catch (err) {
     next(err);
   }
@@ -110,4 +169,4 @@ async function disconnect(req, res, next) {
   }
 }
 
-module.exports = { sync, status, disconnect };
+module.exports = { sync, resync, status, disconnect };
