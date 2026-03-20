@@ -21,7 +21,7 @@ const prisma = new PrismaClient();
 app.set('prisma', prisma);
 
 // Global middleware
-app.use(cors());
+app.use(cors({ origin: false }));
 app.use(express.json());
 
 // Health check
