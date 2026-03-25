@@ -10,6 +10,7 @@ async function getProfile(req, res, next) {
         icsUrl: true,
         lastSync: true,
         notificationsEnabled: true,
+        notificationLeadTime: true,
         darkModeEnabled: true,
         createdAt: true,
       },
@@ -29,10 +30,11 @@ async function getProfile(req, res, next) {
 async function updateSettings(req, res, next) {
   try {
     const prisma = req.app.get('prisma');
-    const { notificationsEnabled, darkModeEnabled } = req.body;
+    const { notificationsEnabled, notificationLeadTime, darkModeEnabled } = req.body;
 
     const data = {};
     if (notificationsEnabled !== undefined) data.notificationsEnabled = notificationsEnabled;
+    if (notificationLeadTime !== undefined) data.notificationLeadTime = notificationLeadTime;
     if (darkModeEnabled !== undefined) data.darkModeEnabled = darkModeEnabled;
 
     const user = await prisma.user.update({
@@ -43,6 +45,7 @@ async function updateSettings(req, res, next) {
         name: true,
         email: true,
         notificationsEnabled: true,
+        notificationLeadTime: true,
         darkModeEnabled: true,
       },
     });

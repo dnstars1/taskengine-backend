@@ -15,6 +15,7 @@ model User {
   icsUrl                String?
   lastSync              DateTime?
   notificationsEnabled  Boolean        @default(true)
+  notificationLeadTime  Int            @default(1440)
   darkModeEnabled       Boolean        @default(false)
   createdAt             DateTime       @default(now())
 
