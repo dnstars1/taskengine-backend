@@ -15,7 +15,7 @@ async function listAssignments(req, res, next) {
     // Recalculate priorities on read
     const result = assignments.map((a) => ({
       ...a,
-      priority: calculatePriority(a.weight, a.difficulty, a.dueDate),
+      priority: calculatePriority(a.difficulty, a.dueDate),
       courseName: a.course.name,
     }));
 
@@ -28,7 +28,7 @@ async function listAssignments(req, res, next) {
 async function createAssignment(req, res, next) {
   try {
     const prisma = req.app.get('prisma');
-    const { title, courseId, dueDate, weight, difficulty } = req.body;
+    const { title, courseId, dueDate, difficulty } = req.body;
 
     // Verify course belongs to user
     const course = await prisma.course.findFirst({
@@ -38,7 +38,7 @@ async function createAssignment(req, res, next) {
       return res.status(404).json({ error: 'Course not found' });
     }
 
-    const priority = calculatePriority(weight || 10, difficulty || 3, dueDate);
+    const priority = calculatePriority(difficulty || 3, dueDate);
 
     const assignment = await prisma.assignment.create({
       data: {
@@ -46,7 +46,6 @@ async function createAssignment(req, res, next) {
         courseId,
         userId: req.userId,
         dueDate: new Date(dueDate),
-        weight: weight || 10,
         difficulty: difficulty || 3,
         priority,
         source: 'manual',
@@ -64,7 +63,7 @@ async function updateAssignment(req, res, next) {
   try {
     const prisma = req.app.get('prisma');
     const { id } = req.params;
-    const { difficulty, weight, title, dueDate } = req.body;
+    const { difficulty, title, dueDate } = req.body;
 
     // Verify ownership
     const existing = await prisma.assignment.findFirst({
@@ -74,14 +73,12 @@ async function updateAssignment(req, res, next) {
       return res.status(404).json({ error: 'Assignment not found' });
     }
 
-    const newWeight = weight !== undefined ? weight : existing.weight;
     const newDifficulty = difficulty !== undefined ? difficulty : existing.difficulty;
     const newDueDate = dueDate ? new Date(dueDate) : existing.dueDate;
-    const priority = calculatePriority(newWeight, newDifficulty, newDueDate);
+    const priority = calculatePriority(newDifficulty, newDueDate);
 
     const data = { priority };
     if (title !== undefined) data.title = title;
-    if (weight !== undefined) data.weight = weight;
     if (difficulty !== undefined) data.difficulty = difficulty;
     if (dueDate !== undefined) data.dueDate = newDueDate;
 

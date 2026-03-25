@@ -39,16 +39,28 @@ async function getSummary(req, res, next) {
 
     const totalStudyMinutes = sessions.reduce((sum, s) => sum + s.duration, 0);
 
-    // Determine workload status
+    // Workload score: combines urgency count with difficulty
+    // Each urgent assignment contributes its difficulty (1-5) to the score
+    const urgentDifficultySum = urgent.reduce((sum, a) => sum + (a.difficulty || 3), 0);
+    // Score out of 100: scale so 15 difficulty points (3 hard assignments) = 100
+    const workloadScore = Math.min(Math.round((urgentDifficultySum / 15) * 100), 100);
+
     let workloadStatus = 'light';
-    if (urgent.length >= 3) workloadStatus = 'heavy';
-    else if (urgent.length >= 1) workloadStatus = 'moderate';
+    if (workloadScore >= 60) workloadStatus = 'heavy';
+    else if (workloadScore >= 25) workloadStatus = 'moderate';
+
+    // Find the hardest urgent assignment
+    const hardestDifficulty = urgent.length > 0
+      ? Math.max(...urgent.map((a) => a.difficulty || 3))
+      : 0;
 
     res.json({
       workloadStatus,
+      workloadScore,
       totalAssignments: assignments.length,
       dueThisWeek: dueThisWeek.length,
       urgentCount: urgent.length,
+      hardestDifficulty,
       totalStudyMinutes,
       nextDeadline: assignments.length > 0 ? assignments[0] : null,
     });

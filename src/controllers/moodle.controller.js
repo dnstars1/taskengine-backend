@@ -1,4 +1,4 @@
-const { parseIcsUrl } = require('../utils/icsParser');
+const { parseIcsUrl, cleanCourseName } = require('../utils/icsParser');
 const { calculatePriority } = require('../utils/priorityCalculator');
 const { encrypt, decrypt } = require('../utils/crypto');
 
@@ -31,6 +31,37 @@ function validateIcsUrl(icsUrl) {
 }
 
 async function syncEvents(prisma, userId, icsUrl) {
+  // Clean up existing course names with Moodle prefixes
+  const existingCourses = await prisma.course.findMany({
+    where: { userId },
+  });
+  for (const course of existingCourses) {
+    const cleaned = cleanCourseName(course.name);
+    if (cleaned !== course.name) {
+      // Check if a course with the clean name already exists
+      const existing = await prisma.course.findUnique({
+        where: { name_userId: { name: cleaned, userId } },
+      });
+      if (existing) {
+        // Move assignments from old course to the clean-named one, then delete old
+        await prisma.assignment.updateMany({
+          where: { courseId: course.id },
+          data: { courseId: existing.id },
+        });
+        await prisma.studySession.updateMany({
+          where: { courseId: course.id },
+          data: { courseId: existing.id },
+        });
+        await prisma.course.delete({ where: { id: course.id } });
+      } else {
+        await prisma.course.update({
+          where: { id: course.id },
+          data: { name: cleaned },
+        });
+      }
+    }
+  }
+
   const events = await parseIcsUrl(icsUrl);
 
   let created = 0;
@@ -45,7 +76,7 @@ async function syncEvents(prisma, userId, icsUrl) {
 
     if (!event.icsUid) continue;
 
-    const priority = calculatePriority(10, 3, event.dueDate);
+    const priority = calculatePriority(3, event.dueDate);
 
     const existing = await prisma.assignment.findUnique({
       where: { icsUid_userId: { icsUid: event.icsUid, userId } },
