@@ -42,7 +42,32 @@ app.use('/api/modules', moduleRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`TaskEngine API running on http://0.0.0.0:${PORT}`);
+async function start() {
+  // Verify database connection before starting
+  try {
+    await prisma.$connect();
+    console.log('Database connected');
+  } catch (err) {
+    console.error('Failed to connect to database:', err.message);
+    console.error('Make sure PostgreSQL is running and DATABASE_URL in .env is correct');
+    process.exit(1);
+  }
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`TaskEngine API running on http://0.0.0.0:${PORT}`);
+  });
+}
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+start();
