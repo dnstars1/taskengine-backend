@@ -55,4 +55,31 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, login };
+async function changePassword(req, res, next) {
+  try {
+    const prisma = req.app.get('prisma');
+    const { email, currentPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, changePassword };
