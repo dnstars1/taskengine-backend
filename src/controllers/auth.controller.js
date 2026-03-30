@@ -1,5 +1,10 @@
-const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+
+// SHA256 — совместимо с Python hashlib.sha256(password.encode()).hexdigest()
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
 
 function signToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -15,7 +20,7 @@ async function register(req, res, next) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = hashPassword(password);
     const user = await prisma.user.create({
       data: { name, email, passwordHash },
     });
@@ -40,7 +45,7 @@ async function login(req, res, next) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = hashPassword(password) === user.passwordHash;
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -65,15 +70,14 @@ async function changePassword(req, res, next) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    const valid = hashPassword(currentPassword) === user.passwordHash;
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: { passwordHash: hashPassword(newPassword) },
     });
 
     res.json({ message: 'Password changed successfully' });
