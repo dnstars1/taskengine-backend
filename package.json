@@ -20,8 +20,10 @@
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.2.1",
+    "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
-    "node-ical": "^0.20.1"
+    "node-ical": "^0.20.1",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "prisma": "^6.4.1"
