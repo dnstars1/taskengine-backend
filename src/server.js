@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
@@ -17,12 +18,31 @@ const moduleRoutes = require('./routes/module.routes');
 const app = express();
 const prisma = new PrismaClient();
 
-// Share Prisma client via app settings
 app.set('prisma', prisma);
 
-// Global middleware
-app.use(cors({ origin: false }));
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
+
+// Swagger UI — необязательный, сервер не упадёт если нет файла/пакета
+try {
+  const swaggerUi = require('swagger-ui-express');
+  const yaml = require('js-yaml');
+  const fs = require('fs');
+  const path = require('path');
+  const swaggerDoc = yaml.load(
+    fs.readFileSync(path.join(__dirname, '..', 'swagger.yaml'), 'utf8')
+  );
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc, {
+    customSiteTitle: 'TaskEngine API Docs',
+  }));
+} catch (e) {
+  console.warn('Swagger UI not loaded:', e.message);
+}
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -39,35 +59,36 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/study-sessions', studySessionRoutes);
 app.use('/api/modules', moduleRoutes);
 
-// Error handler (must be last)
 app.use(errorHandler);
 
+const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} already in use. Run: lsof -ti:${PORT} | xargs kill -9`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
+});
+
 async function start() {
-  // Verify database connection before starting
   try {
     await prisma.$connect();
     console.log('Database connected');
   } catch (err) {
-    console.error('Failed to connect to database:', err.message);
-    console.error('Make sure PostgreSQL is running and DATABASE_URL in .env is correct');
+    console.error('DB connection failed:', err.message);
     process.exit(1);
   }
 
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`TaskEngine API running on http://0.0.0.0:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅  TaskEngine API running on http://0.0.0.0:${PORT}`);
+    console.log(`📖  Swagger UI:  http://localhost:${PORT}/docs`);
   });
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on('SIGINT', async () => { await prisma.$disconnect(); process.exit(0); });
+process.on('SIGTERM', async () => { await prisma.$disconnect(); process.exit(0); });
 
 start();
