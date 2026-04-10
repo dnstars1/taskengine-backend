@@ -14,6 +14,7 @@ const dashboardRoutes = require('./routes/dashboard.routes');
 const calendarRoutes = require('./routes/calendar.routes');
 const studySessionRoutes = require('./routes/studySession.routes');
 const moduleRoutes = require('./routes/module.routes');
+const insightsRoutes = require('./routes/insights.routes');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -58,6 +59,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/study-sessions', studySessionRoutes);
 app.use('/api/modules', moduleRoutes);
+app.use('/api/insights', insightsRoutes);
 
 app.use(errorHandler);
 
