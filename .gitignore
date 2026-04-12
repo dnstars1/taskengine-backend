@@ -1,0 +1,8 @@
+node_modules/
+.env
+dist/
+prisma/*.db
+.pgdata/
+.DS_Store
+.idea/
+fix_server.js

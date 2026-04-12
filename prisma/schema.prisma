@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    Int            @id @default(autoincrement())
+  name                  String
+  email                 String         @unique
+  passwordHash          String
+  icsUrl                String?
+  lastSync              DateTime?
+  notificationsEnabled  Boolean        @default(true)
+  notificationLeadTime  Int            @default(1440)
+  darkModeEnabled       Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+
+  courses       Course[]
+  assignments   Assignment[]
+  studySessions StudySession[]
+}
+
+model Course {
+  id     Int    @id @default(autoincrement())
+  name   String
+  userId Int
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+  studySessions StudySession[]
+
+  @@unique([name, userId])
+}
+
+model Assignment {
+  id         Int      @id @default(autoincrement())
+  title      String
+  courseId    Int
+  userId     Int
+  dueDate    DateTime
+  weight     Float    @default(10)
+  difficulty Int      @default(3)
+  priority   Float    @default(0)
+  source     String   @default("manual")
+  icsUid     String?
+  createdAt  DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([icsUid, userId])
+}
+
+model StudySession {
+  id       Int      @id @default(autoincrement())
+  userId   Int
+  courseId  Int
+  duration Int
+  date     DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
