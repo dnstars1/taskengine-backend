@@ -2,20 +2,39 @@
 
 Node.js API for the TaskEngine student productivity app. Built with Express, Prisma, and PostgreSQL.
 
+## Quick Start
+
+Want to try the app without setting up a local backend? The production backend is already deployed at `https://taskengine-backend.onrender.com`. Just install the Flutter APK (or build your own — see [Running the Flutter App Locally](#running-the-flutter-app-locally)) and register an account.
+
+To run the backend locally, follow the steps below:
+1. Clone both repos
+2. Set up PostgreSQL and create the database
+3. Configure `.env` with database URL, secrets, and Groq API key
+4. Run migrations (first time only)
+5. Start the server with `npm run dev` or `npm start`
+
 ## Prerequisites
 
 - Node.js 18+
 - PostgreSQL 14+
+- (Optional) A free [Groq API key](https://console.groq.com/keys) for AI study advice
 
 ## Setup
 
-### 1. Install dependencies
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/dnstars1/taskengine-backend.git
+cd taskengine-backend
+```
+
+### 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Set up PostgreSQL
+### 3. Set up PostgreSQL
 
 **Mac (Homebrew):**
 ```bash
@@ -50,7 +69,7 @@ sudo systemctl start postgresql
 sudo -u postgres createdb taskengine
 ```
 
-### 3. Configure environment
+### 4. Configure environment
 
 ```bash
 cp .env.example .env
@@ -74,13 +93,25 @@ openssl rand -hex 32
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 4. Run migrations
+Add a Groq API key for AI Study Advice (optional but recommended):
+1. Sign up at https://console.groq.com
+2. Go to **API Keys** → **Create API Key**
+3. Add to your `.env`:
+   ```
+   GROQ_API_KEY="gsk_..."
+   ```
+
+If you skip this, the AI Study Advice card will fail silently and be hidden.
+
+### 5. Run migrations
 
 ```bash
 npx prisma migrate deploy
 ```
 
-### 5. Start the server
+This creates all tables. You only need to do this once (or after pulling new migrations).
+
+### 6. Start the server
 
 ```bash
 # Development (auto-reload)
@@ -92,12 +123,15 @@ npm start
 
 The API will be available at `http://localhost:3000/api`.
 
+Interactive API docs (Swagger UI) are at `http://localhost:3000/docs`.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | /api/auth/register | Create account |
 | POST | /api/auth/login | Sign in |
+| POST | /api/auth/change-password | Change password |
 | GET | /api/user/profile | Get user profile |
 | PUT | /api/user/settings | Update settings |
 | GET | /api/assignments | List assignments |
@@ -112,6 +146,7 @@ The API will be available at `http://localhost:3000/api`.
 | GET | /api/modules | List courses |
 | POST | /api/study-sessions | Log study session |
 | GET | /api/study-sessions/weekly | Weekly study stats |
+| GET | /api/insights/study-advice | AI-generated study advice (Groq) |
 | GET | /api/health | Health check |
 
 ## Running the Flutter App Locally
@@ -133,7 +168,7 @@ The Flutter frontend is in a separate repo: [TaskEngineFlutter](https://github.c
    flutter pub get
    ```
 
-2. Make sure the backend is running locally first (see Setup above).
+2. Make sure the backend is running — either locally (see Setup above) or use the hosted one at `https://taskengine-backend.onrender.com` (no setup needed).
 
 3. Run the app:
 
@@ -173,6 +208,12 @@ The Flutter app uses `lib/config/api_config.dart` to determine the backend URL:
 
 To test mobile against your local backend, change the URL temporarily in `api_config.dart` to your computer's LAN IP, e.g., `http://192.168.1.10:3000/api`.
 
+## Deployment Notes
+
+- The backend is deployed on Render's free tier. The build script only runs `npx prisma generate` — migrations are applied manually via local `psql` or `npx prisma migrate deploy` to avoid long build times.
+- The database is hosted on Supabase (PostgreSQL). The connection uses Supabase's transaction pooler on port 6543 for IPv4 compatibility.
+- Environment variables required on Render: `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `GROQ_API_KEY`.
+
 ## Troubleshooting
 
 **"Failed to connect to database"**
@@ -183,6 +224,11 @@ To test mobile against your local backend, change the URL temporarily in `api_co
 **"ENCRYPTION_KEY must be a 64-character hex string"**
 - Generate a new key: `openssl rand -hex 32`
 - Must be exactly 64 characters (32 bytes in hex)
+
+**AI Study Advice card doesn't appear**
+- Check that `GROQ_API_KEY` is set in `.env`
+- Test the endpoint directly: `curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/api/insights/study-advice`
+- Response is cached per user for 30 minutes — restart the server to clear
 
 **Port already in use**
 - **Mac/Linux:** `lsof -i :3000` then `kill <PID>`
